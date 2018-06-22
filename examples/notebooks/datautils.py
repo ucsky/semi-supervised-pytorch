@@ -20,10 +20,11 @@ class SpriteDataset(Dataset):
     * x-position
     * y-position
     """
+
     def __init__(self, transform=None):
         self.transform = transform
         url = "https://github.com/deepmind/dsprites-dataset/raw/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
-        
+
         try:
             self.dset = np.load("./dsprites.npz", encoding="bytes")["imgs"]
         except FileNotFoundError:
@@ -35,10 +36,10 @@ class SpriteDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = self.dset[idx]
-                
+
         if self.transform:
             sample = self.transform(sample)
-            
+
         return sample
 
 
@@ -48,9 +49,10 @@ def get_mnist(location="./", batch_size=64, labels_per_class=100):
     from torch.utils.data.sampler import SubsetRandomSampler
     from torchvision.datasets import MNIST
     import torchvision.transforms as transforms
-    from utils import onehot
+    from sesutils import onehot
 
-    flatten_bernoulli = lambda x: transforms.ToTensor()(x).view(-1).bernoulli()
+    def flatten_bernoulli(x): return transforms.ToTensor()(
+        x).view(-1).bernoulli()
 
     mnist_train = MNIST(location, train=True, download=True,
                         transform=flatten_bernoulli, target_transform=onehot(n_labels))
@@ -59,11 +61,13 @@ def get_mnist(location="./", batch_size=64, labels_per_class=100):
 
     def get_sampler(labels, n=None):
         # Only choose digits in n_labels
-        (indices,) = np.where(reduce(__or__, [labels == i for i in np.arange(n_labels)]))
+        (indices,) = np.where(
+            reduce(__or__, [labels == i for i in np.arange(n_labels)]))
 
         # Ensure uniform distribution of labels
         np.random.shuffle(indices)
-        indices = np.hstack([list(filter(lambda idx: labels[idx] == i, indices))[:n] for i in range(n_labels)])
+        indices = np.hstack([list(filter(lambda idx: labels[idx] == i, indices))[
+                            :n] for i in range(n_labels)])
 
         indices = torch.from_numpy(indices)
         sampler = SubsetRandomSampler(indices)

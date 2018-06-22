@@ -9,20 +9,25 @@ np.random.seed(1337)
 cuda = torch.cuda.is_available()
 print("CUDA: {}".format(cuda))
 
+
 def binary_cross_entropy(r, x):
     "Drop in replacement until PyTorch adds `reduce` keyword."
     return -torch.sum(x * torch.log(r + 1e-8) + (1 - x) * torch.log(1 - r + 1e-8), dim=-1)
 
+
 n_labels = 10
+
+
 def get_mnist(location="./", batch_size=64, labels_per_class=100):
     from functools import reduce
     from operator import __or__
     from torch.utils.data.sampler import SubsetRandomSampler
     from torchvision.datasets import MNIST
     import torchvision.transforms as transforms
-    from utils import onehot
+    from sesutils import onehot
 
-    flatten_bernoulli = lambda x: transforms.ToTensor()(x).view(-1).bernoulli()
+    def flatten_bernoulli(x): return transforms.ToTensor()(
+        x).view(-1).bernoulli()
 
     mnist_train = MNIST(location, train=True, download=True,
                         transform=flatten_bernoulli, target_transform=onehot(n_labels))
@@ -31,11 +36,13 @@ def get_mnist(location="./", batch_size=64, labels_per_class=100):
 
     def get_sampler(labels, n=None):
         # Only choose digits in n_labels
-        (indices,) = np.where(reduce(__or__, [labels == i for i in np.arange(n_labels)]))
+        (indices,) = np.where(
+            reduce(__or__, [labels == i for i in np.arange(n_labels)]))
 
         # Ensure uniform distribution of labels
         np.random.shuffle(indices)
-        indices = np.hstack([list(filter(lambda idx: labels[idx] == i, indices))[:n] for i in range(n_labels)])
+        indices = np.hstack([list(filter(lambda idx: labels[idx] == i, indices))[
+                            :n] for i in range(n_labels)])
 
         indices = torch.from_numpy(indices)
         sampler = SubsetRandomSampler(indices)
@@ -51,12 +58,14 @@ def get_mnist(location="./", batch_size=64, labels_per_class=100):
 
     return labelled, unlabelled, validation
 
+
 if __name__ == "__main__":
     from itertools import repeat, cycle
     from torch.autograd import Variable
     from inference import SVI, DeterministicWarmup, ImportanceWeightedSampler
 
-    labelled, unlabelled, validation = get_mnist(location="./", batch_size=100, labels_per_class=10)
+    labelled, unlabelled, validation = get_mnist(
+        location="./", batch_size=100, labels_per_class=10)
     alpha = 0.1 * len(unlabelled) / len(labelled)
 
     models = []
@@ -70,16 +79,20 @@ if __name__ == "__main__":
     # models += [AuxiliaryDeepGenerativeModel([784, n_labels, 100, 100, [500, 500]])]
 
     from models import LadderDeepGenerativeModel
-    models += [LadderDeepGenerativeModel([784, n_labels, [32, 16, 8], [128, 128, 128]])]
+    models += [LadderDeepGenerativeModel([784,
+                                          n_labels, [32, 16, 8], [128, 128, 128]])]
 
     for model in models:
-        if cuda: model = model.cuda()
+        if cuda:
+            model = model.cuda()
 
-        beta = DeterministicWarmup(n=4*len(unlabelled)*100)
+        beta = DeterministicWarmup(n=4 * len(unlabelled) * 100)
         sampler = ImportanceWeightedSampler(mc=1, iw=1)
 
-        elbo = SVI(model, likelihood=binary_cross_entropy, beta=beta, sampler=sampler)
-        optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999))
+        elbo = SVI(model, likelihood=binary_cross_entropy,
+                   beta=beta, sampler=sampler)
+        optimizer = torch.optim.Adam(
+            model.parameters(), lr=3e-4, betas=(0.9, 0.999))
 
         epochs = 251
         best = 0.0
@@ -103,7 +116,8 @@ if __name__ == "__main__":
 
                 # Add auxiliary classification loss q(y|x)
                 logits = model.classify(x)
-                classication_loss = torch.sum(y * torch.log(logits + 1e-8), dim=1).mean()
+                classication_loss = torch.sum(
+                    y * torch.log(logits + 1e-8), dim=1).mean()
 
                 J_alpha = L - alpha * classication_loss + U
 
@@ -120,17 +134,19 @@ if __name__ == "__main__":
                 accuracy += torch.mean((pred_idx.data == lab_idx.data).float())
 
             m = len(unlabelled)
-            print(*(total_loss / m, labelled_loss / m, unlabelled_loss / m, accuracy / m), sep="\t", file=file)
+            print(*(total_loss / m, labelled_loss / m,
+                    unlabelled_loss / m, accuracy / m), sep="\t", file=file)
 
             if epoch % 1 == 0:
                 model.eval()
                 print("Epoch: {}".format(epoch))
                 print("[Train]\t\t J_a: {:.2f}, L: {:.2f}, U: {:.2f}, accuracy: {:.2f}".format(total_loss / m,
-                                                                                              labelled_loss / m,
-                                                                                              unlabelled_loss / m,
-                                                                                              accuracy / m))
+                                                                                               labelled_loss / m,
+                                                                                               unlabelled_loss / m,
+                                                                                               accuracy / m))
 
-                total_loss, labelled_loss, unlabelled_loss, accuracy = (0, 0, 0, 0)
+                total_loss, labelled_loss, unlabelled_loss, accuracy = (
+                    0, 0, 0, 0)
                 for x, y in validation:
                     x, y = Variable(x), Variable(y)
 
@@ -141,7 +157,8 @@ if __name__ == "__main__":
                     U = -elbo(x)
 
                     logits = model.classify(x)
-                    classication_loss = -torch.sum(y * torch.log(logits + 1e-8), dim=1).mean()
+                    classication_loss = - \
+                        torch.sum(y * torch.log(logits + 1e-8), dim=1).mean()
 
                     J_alpha = L + alpha * classication_loss + U
 
@@ -151,14 +168,16 @@ if __name__ == "__main__":
 
                     _, pred_idx = torch.max(logits, 1)
                     _, lab_idx = torch.max(y, 1)
-                    accuracy += torch.mean((pred_idx.data == lab_idx.data).float())
+                    accuracy += torch.mean((pred_idx.data ==
+                                            lab_idx.data).float())
 
                 m = len(validation)
-                print(*(total_loss / m, labelled_loss / m, unlabelled_loss / m, accuracy / m), sep="\t", file=file)
+                print(*(total_loss / m, labelled_loss / m,
+                        unlabelled_loss / m, accuracy / m), sep="\t", file=file)
                 print("[Validation]\t J_a: {:.2f}, L: {:.2f}, U: {:.2f}, accuracy: {:.2f}".format(total_loss / m,
-                                                                                              labelled_loss / m,
-                                                                                              unlabelled_loss / m,
-                                                                                              accuracy / m))
+                                                                                                  labelled_loss / m,
+                                                                                                  unlabelled_loss / m,
+                                                                                                  accuracy / m))
 
             if accuracy > best:
                 best = accuracy
